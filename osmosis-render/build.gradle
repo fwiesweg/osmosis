@@ -1,0 +1,14 @@
+dependencies {
+    compile project(':osmosis-core')
+    compile project(':osmosis-xml')
+    compile group: 'org.apache.xmlgraphics', name: 'batik-all', version: '1.12'
+
+    testCompile project(':osmosis-testutil')
+}
+
+/*
+ * Disable checkstyle.
+ * The tag transform plugin used to exist outside the main source tree and as a result
+ * doesn't comply with Osmosis coding standards.
+ */
+checkstyleMain.enabled = false

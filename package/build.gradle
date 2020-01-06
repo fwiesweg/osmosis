@@ -13,6 +13,7 @@ dependencies {
     runtime project(':osmosis-pbf2')
     runtime project(':osmosis-pgsimple')
     runtime project(':osmosis-pgsnapshot')
+    runtime project(':osmosis-render')
     runtime project(':osmosis-replication')
     runtime project(':osmosis-replication-http')
     runtime project(':osmosis-set')
