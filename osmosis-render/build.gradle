@@ -2,6 +2,7 @@ dependencies {
     compile project(':osmosis-core')
     compile project(':osmosis-xml')
     compile group: 'org.apache.xmlgraphics', name: 'batik-all', version: '1.12'
+    compile group: 'org.apache.commons', name: 'commons-lang3', version: '3.9'
 
     testCompile project(':osmosis-testutil')
 }
