@@ -9,25 +9,22 @@ import org.openstreetmap.osmosis.core.Osmosis;
 import org.openstreetmap.osmosis.testutil.AbstractDataTest;
 
 /**
- * Tests the tag transform functionality.
+ * Tests rendering.
  *
- * @author Brett Henderson
+ * @author Florian Wiesweg
  */
 public class RenderTest extends AbstractDataTest {
 
-    /**
-     * Tests transforming all tags in a single OSM file.
-     *
-     * @throws IOException if any file operations fail.
-     */
+	/**
+	 * Renders a simple border.
+	 * 
+	 * @throws IOException if any file operations fail.
+	 */
     @Test
     public void testRender() throws IOException {
-        File sourceFile;
-        File sinkFile;
-
-        // Generate files.
-        sourceFile = dataUtils.createDataFile("v0_6/test-in.osm");
-        sinkFile = dataUtils.newFile();
+        File sourceFile = dataUtils.createDataFile("v0_6/test-in.osm");
+        File actualOutputFile = dataUtils.newFile();
+        File expectedOutputFile = dataUtils.createDataFile("v0_6/test-out.svg");
 
         // Append the two source files into the destination file.
         Osmosis.run(
@@ -37,12 +34,12 @@ public class RenderTest extends AbstractDataTest {
                     sourceFile.getPath(),
                     "--tag-sort-0.6",
                     "--render-0.6",
-                    sinkFile.getPath()
+                    actualOutputFile.getPath()
                 }
         );
 
         // Validate that the output file matches the expected result.
-        //dataUtils.compareFiles(expectedOutputFile, actualOutputFile);
+        dataUtils.compareFiles(expectedOutputFile, actualOutputFile);
     }
 
 }
