@@ -9,18 +9,13 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStreamWriter;
 import java.nio.charset.Charset;
-import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
-import java.util.Deque;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
-
 import org.apache.batik.dom.GenericDOMImplementation;
 import org.apache.batik.svggen.SVGGraphics2D;
 import org.apache.commons.lang3.tuple.Pair;
@@ -33,7 +28,6 @@ import org.openstreetmap.osmosis.core.container.v0_6.WayContainer;
 import org.openstreetmap.osmosis.core.domain.v0_6.EntityType;
 import org.openstreetmap.osmosis.core.domain.v0_6.Node;
 import org.openstreetmap.osmosis.core.domain.v0_6.Relation;
-import org.openstreetmap.osmosis.core.domain.v0_6.Tag;
 import org.openstreetmap.osmosis.core.domain.v0_6.Way;
 import org.openstreetmap.osmosis.core.task.v0_6.Sink;
 import org.w3c.dom.DOMImplementation;
@@ -74,14 +68,16 @@ public class RenderTask implements Sink {
     
     @Override
     public void complete() {
-        List<List<Pair<Double, Double>>> paths = new ArrayList<>(relations.size() * 2);
-        relations.values().forEach(r -> {
-                	List<List<Long>> cways = r.stream() // relation to list of ways
+        List<Pair<Double, List<Pair<Double, Double>>>> paths = new ArrayList<>(relations.size() * 2);
+        relations.entrySet().forEach(r -> {
+                	List<List<Long>> cways = r.getValue().stream() // relation to list of ways
                 		.map(ways::get)
                 		.filter(w -> w != null)
                 		.collect(Collectors.toList());
-                	
-                	List<Long> orderedNodes = new ArrayList<>();
+                	Double weight = relationsWeight.get(r.getKey());
+        			weight = weight == null ? 0d : weight;
+
+        			List<Long> orderedNodes = new ArrayList<>();
                 	for(int i = 0; i < cways.size(); i++) {
                 		List<Long> newPath = null;
                 		List<Long> current = cways.get(i);
@@ -115,15 +111,11 @@ public class RenderTask implements Sink {
                 		orderedNodes.addAll(current);
 
                 		if(newPath != null || i == cways.size() -1 ) {
-                			paths.add(orderedNodes.stream()
+                			paths.add(Pair.of(weight, orderedNodes.stream()
                 				.map(nid -> nodes.get(nid))
                 				.filter(n -> n != null)
-                				.map(n -> {
-                					//	Point p = Point.fromLatitudeLongitude(n.getLatitude(), n.getLongitude());
-                					// 	return Pair.of(p.getMeterX(), p.getMeterY());
-                					return Pair.of(n.getLatitude(), n.getLongitude());
-                				})
-                				.collect(Collectors.toList()));
+                				.map(RenderTask::getMeters)
+                				.collect(Collectors.toList())));
                 			
                 			orderedNodes = new ArrayList<>(newPath != null ? newPath : Collections.emptyList());;
                 		}
@@ -134,23 +126,23 @@ public class RenderTask implements Sink {
         // but, seriously, they all suck. As long as there's enough RAM, I don't care.
 
         double maxX = paths.stream()
-                .flatMap(p -> p.stream())
+                .flatMap(p -> p.getRight().stream())
                 .map(p -> p.getLeft())
                 .collect(Collectors.maxBy(Comparator.naturalOrder()))
                 .get();
         double minX = paths.stream()
-                .flatMap(p -> p.stream())
+        		.flatMap(p -> p.getRight().stream())
                 .map(p -> p.getLeft())
                 .collect(Collectors.minBy(Comparator.naturalOrder()))
                 .get();
 
         double maxY = paths.stream()
-                .flatMap(p -> p.stream())
+        		.flatMap(p -> p.getRight().stream())
                 .map(p -> p.getRight())
                 .collect(Collectors.maxBy(Comparator.naturalOrder()))
                 .get();
         double minY = paths.stream()
-                .flatMap(p -> p.stream())
+        		.flatMap(p -> p.getRight().stream())
                 .map(p -> p.getRight())
                 .collect(Collectors.minBy(Comparator.naturalOrder()))
                 .get();
@@ -168,14 +160,15 @@ public class RenderTask implements Sink {
 
         SVGGraphics2D svgGenerator = new SVGGraphics2D(document);
         svgGenerator.setSVGCanvasSize(new Dimension(outputSizeX, outputSizeY));
+        
+        Color baseColor = new Color(239, 239, 239);
+        Color highlightColor = new Color(23,  62, 125);
 
-        svgGenerator.setPaint(Color.red);
-        svgGenerator.rotate(-Math.PI / 2);
-        svgGenerator.translate(-Math.floor(outputSizeX / 2f), Math.floor(outputSizeY / 2f));
+        svgGenerator.translate(Math.floor(outputSizeX / 2f), Math.floor(outputSizeY / 2f));
 
         paths.forEach(path -> {
-            Path2D.Double drawPath = new Path2D.Double();
-            path.stream()
+            Path2D.Double drawPath = new Path2D.Double(); 
+            path.getRight().stream()
                     .map(p -> Pair.of((p.getLeft() - centerX) * scale, (p.getRight() - centerY) * scale))
                     .peek(p -> {
                         if (drawPath.getCurrentPoint() == null) {
@@ -186,8 +179,8 @@ public class RenderTask implements Sink {
                     .forEach(p -> {
                         drawPath.lineTo(p.getLeft(), p.getRight());
                     });
-           //svgGenerator.fill(drawPath);
-           svgGenerator.draw(drawPath);
+           svgGenerator.setPaint(blend(baseColor, highlightColor, path.getLeft() / maxWeight));
+           svgGenerator.fill(drawPath);
         });
 
         try ( FileOutputStream fos = new FileOutputStream(outputFile)) {
@@ -243,6 +236,27 @@ public class RenderTask implements Sink {
                 relations.get(r.getId()).add(rm.getMemberId());
             });
         }
+    }
+    
+    public static Color blend(Color c0, Color c1, double w1) {
+    	double w0 = 1 - w1;
+    	
+        double r = w0 * c0.getRed() + w1 * c1.getRed();
+        double g = w0 * c0.getGreen() + w1 * c1.getGreen();
+        double b = w0 * c0.getBlue() + w1 * c1.getBlue();
+
+        return new Color((int) r, (int) g, (int) b);
+    }
+    
+    private static final double EARTH_RADIUS = 6378137d;
+    private static final double ORIGIN_SHIFT = 2d * Math.PI * EARTH_RADIUS / 2d;
+    public static Pair<Double, Double> getMeters(Node n) {
+        double meterX = n.getLongitude() * ORIGIN_SHIFT / 180d;
+        
+        double meterY = Math.log(Math.tan((90d + n.getLatitude()) * Math.PI / 360d)) / (Math.PI / 180d);
+        meterY = meterY * ORIGIN_SHIFT / 180d;
+        
+        return Pair.of(meterX, -meterY);
     }
 
 }
